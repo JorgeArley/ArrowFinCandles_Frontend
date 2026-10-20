@@ -4,8 +4,8 @@ Web interface to browse the OHLCV candles served by the
 [ArrowFin candles backend](../arrow-fin-candles_backend).
 
 - `GET /candles?symbol=MES&tf=5m` returns the candles of a contract and a timeframe.
-- The interface shows them as a **line of close prices**, with a contract selector, a timeframe
-  selector and the loading / error / success states of the request.
+- The interface shows them as a **candlestick chart** (japanese candles), with a contract
+  selector, a timeframe selector and the loading / error / success states of the request.
 - The data is never re-aggregated in the browser: the backend already returns the candles of the
   requested timeframe.
 
@@ -71,7 +71,9 @@ browser -> http://localhost:5173/api/candles?symbol=NQ&tf=15m
 │  │ MES │ NQ   │   │ 1m 5m 15m 1h     │                   │
 │  └────────────┘   └──────────────────┘                   │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │              Line chart of the close prices         │  │
+│  │                                                    │  │
+│  │           Candlestick chart of the candles          │  │
+│  │                                                    │  │
 │  └────────────────────────────────────────────────────┘  │
 │  ┌──────┬──────┬──────┬──────┬──────────┐               │
 │  │ Open │ High │ Low  │ Close│  Volume  │               │
@@ -85,6 +87,16 @@ browser -> http://localhost:5173/api/candles?symbol=NQ&tf=15m
 | Error | A readable message and a **Retry** button |
 | Success | The chart and the summary of the session |
 
+### The chart
+
+| Aspect | Detail |
+| --- | --- |
+| Type | `candlestick`, provided by [chartjs-chart-financial](https://github.com/chartjs/chartjs-chart-financial) |
+| Candle | Green when the close is above the open, red when it is below, grey when they are equal |
+| Time axis | UTC, with the timestamp of every candle |
+| Tooltip | Date and time (UTC), open, high, low, close and volume of the candle |
+| Width of the candle | `barThickness: 'flex'`: each candle takes the space of its neighbours, so the same chart works with 7 candles and with 384 |
+
 ---
 
 ## Architecture
@@ -96,6 +108,7 @@ src/
 │   ├── ui/OptionGroup/               Segmented control used by both selectors
 │   ├── ui/Spinner/
 │   └── utils/                        Number and UTC date/time formatting
+├── types/                            Types of the third party packages that do not ship their own
 └── modules/candles-chart/            The feature
     ├── candles-chart.types.ts        Candle, ContractSymbol, Timeframe
     ├── candles-chart.constants.ts    Supported symbols and timeframes

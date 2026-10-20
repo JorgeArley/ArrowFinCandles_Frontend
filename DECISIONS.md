@@ -41,6 +41,8 @@ And, when reviewing the plan:
 - **Kept**: the three elements of the interface (contract selector, timeframe selector and
   chart), the three states of the request and the line of close prices as the solution for the
   chart.
+- **Modified**: the chart itself. The line of close prices was replaced by a candlestick chart
+  (japanese candles) once the data with its open, high, low and close was available.
 - **Modified**: how the API is reached. The frontend and the backend share the host but not the
   port, and the backend does not enable CORS, so instead of calling `http://localhost:3000`
   directly the frontend requests `/api/candles` and the Vite dev server proxies it to
@@ -71,3 +73,7 @@ And, when reviewing the plan:
 | Sliding indicator in the selectors instead of only changing the colour of the option | The movement communicates which option is active; the colour just jumps |
 | The summary values are remounted when they change | The `key` restarts the entry CSS animation: the new number appears with a short movement instead of jumping |
 | `width: 100%` on the canvas container | Its parent is a flex column with `align-items: center`, which shrinks it to the canvas size (300px by default) and the chart is drawn in a narrow strip |
+| Candlesticks through `chartjs-chart-financial` | Chart.js has no candlestick controller of its own; the plugin is the reference implementation and handles the wick, the body and the doji (open equals close) |
+| `barThickness: 'flex'` on the dataset | The default thickness is computed from the axis and overflows the chart with a time axis; `flex` measures the neighbouring candles, so the same chart works with 7 candles and with 384 |
+| Timestamps as numbers in the chart points | The financial controller parses the data itself (`parsing: false`) and the scale only accepts numeric values: a `Date` is discarded and the axis ends up without ticks |
+| `priceBounds` computes the limits of the price axis | The plugin derives them from the candles, but with a single candle it falls back to a `0..1` axis; the own bounds also leave a margin around the candles |

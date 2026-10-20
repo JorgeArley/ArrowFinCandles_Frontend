@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Candle } from '../src/modules/candles-chart/candles-chart.types'
 import {
   aggregateCandles,
-  toChartPoints,
+  toCandlePoints,
 } from '../src/modules/candles-chart/domain/candle-series'
 import fixture from './fixtures/mes-5m.json'
 import { resend, shuffle, withDuplicated } from './helpers/candles'
@@ -11,7 +11,7 @@ const candles: Candle[] = fixture.candles
 
 describe('the duplicated rows', () => {
   it('a candle repeated does not duplicate the point in the series', () => {
-    const points = toChartPoints(withDuplicated(candles, 10))
+    const points = toCandlePoints(withDuplicated(candles, 10))
 
     expect(points).toHaveLength(candles.length)
   })
@@ -34,11 +34,11 @@ describe('the duplicated rows', () => {
   })
 
   it('resending the whole dataset does not change the series', () => {
-    expect(toChartPoints(resend(candles))).toEqual(toChartPoints(candles))
+    expect(toCandlePoints(resend(candles))).toEqual(toCandlePoints(candles))
   })
 
   it('the result does not depend on the order the rows arrive in', () => {
-    expect(toChartPoints(shuffle(candles, 7))).toEqual(toChartPoints(candles))
+    expect(toCandlePoints(shuffle(candles, 7))).toEqual(toCandlePoints(candles))
     expect(aggregateCandles(shuffle(candles, 7))).toEqual(aggregateCandles(candles))
   })
 })

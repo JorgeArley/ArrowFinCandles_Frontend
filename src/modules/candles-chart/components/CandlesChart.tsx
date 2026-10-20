@@ -1,31 +1,32 @@
 import {
   Chart as ChartJS,
-  Filler,
   Legend,
-  LineElement,
   LinearScale,
-  PointElement,
-  TimeScale,
+  TimeSeriesScale,
   Tooltip,
   type ChartData,
   type ChartOptions,
   type TooltipItem,
 } from 'chart.js'
+import { CandlestickController, CandlestickElement } from 'chartjs-chart-financial'
 import 'chartjs-adapter-date-fns'
 import { useMemo } from 'react'
-import { Line } from 'react-chartjs-2'
+import { Chart } from 'react-chartjs-2'
 import { formatUtcDateTime, formatUtcTime } from '../../../shared/utils/formatDateTime'
 import { formatPrice, formatVolume } from '../../../shared/utils/formatNumber'
 import type { Candle, Timeframe } from '../candles-chart.types'
-import { toChartPoints, type CandlePoint } from '../domain/candle-series'
+import { priceBounds, toCandlePoints, type CandlePoint } from '../domain/candle-series'
 import styles from './CandlesChart.module.css'
 
-ChartJS.register(LineElement, PointElement, LinearScale, TimeScale, Tooltip, Legend, Filler)
+ChartJS.register(CandlestickController, CandlestickElement, TimeSeriesScale, LinearScale, Tooltip, Legend)
 
-const LINE_COLOR = '#38bdf8'
 const GRID_COLOR = 'rgba(148, 163, 184, 0.12)'
 const AXIS_COLOR = 'rgba(148, 163, 184, 0.25)'
 const TICK_COLOR = '#64748b'
+
+const UP_BORDER = '#22c55e'
+const DOWN_BORDER = '#ef4444'
+const UNCHANGED_BORDER = '#94a3b8'
 
 interface CandlesChartProps {
   readonly candles: Candle[]
@@ -33,30 +34,30 @@ interface CandlesChartProps {
 }
 
 export function CandlesChart({ candles, tf }: CandlesChartProps) {
-  const data = useMemo<ChartData<'line', CandlePoint[], Date>>(() => {
-    const points = toChartPoints(candles)
+  const data = useMemo<ChartData<'candlestick', CandlePoint[]>>(() => {
+    const points = toCandlePoints(candles)
 
     return {
       datasets: [
         {
-          label: 'Close',
+          label: 'Candles',
           data: points,
-          borderColor: LINE_COLOR,
-          backgroundColor: 'rgba(56, 189, 248, 0.12)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.15,
-          pointRadius: points.length === 1 ? 4 : 0,
-          pointHoverRadius: 4,
-          pointHoverBackgroundColor: LINE_COLOR,
-          pointHoverBorderColor: '#0f172a',
+          barThickness: 'flex',
+          borderColors: { up: UP_BORDER, down: DOWN_BORDER, unchanged: UNCHANGED_BORDER },
+          backgroundColors: {
+            up: 'rgba(34, 197, 94, 0.35)',
+            down: 'rgba(239, 68, 68, 0.35)',
+            unchanged: 'rgba(148, 163, 184, 0.35)',
+          },
         },
       ],
     }
   }, [candles])
 
-  const options = useMemo<ChartOptions<'line'>>(
-    () => ({
+  const options = useMemo<ChartOptions<'candlestick'>>(() => {
+    const bounds = priceBounds(candles)
+
+    return {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
@@ -74,14 +75,30 @@ export function CandlesChart({ candles, tf }: CandlesChartProps) {
       plugins: {
         legend: { display: false },
         tooltip: {
+          displayColors: false,
           callbacks: {
             title: (items) => {
-              const timestamp = items[0]?.parsed.x
+              const candle = items.length > 0 ? candleOf(items[0]) : null
 
-              return timestamp === null || timestamp === undefined ? '' : formatUtcDateTime(timestamp)
+              return candle ? formatUtcDateTime(candle.x) : ''
             },
-            label: (item) => (item.parsed.y === null ? '' : `Close ${formatPrice(item.parsed.y)}`),
-            afterLabel: (item) => `Volume ${formatVolume(volumeOf(item))}`,
+            label: (item) => {
+              const candle = candleOf(item)
+
+              if (!candle) return ''
+
+              return [
+                `Open ${formatPrice(candle.o)}`,
+                `High ${formatPrice(candle.h)}`,
+                `Low ${formatPrice(candle.l)}`,
+                `Close ${formatPrice(candle.c)}`,
+              ]
+            },
+            afterLabel: (item) => {
+              const candle = candleOf(item)
+
+              return candle ? `Volume ${formatVolume(candle.volume)}` : ''
+            },
           },
         },
       },
@@ -93,12 +110,16 @@ export function CandlesChart({ candles, tf }: CandlesChartProps) {
             color: TICK_COLOR,
             maxRotation: 0,
             autoSkip: true,
+            autoSkipPadding: 24,
+            maxTicksLimit: 10,
             callback: (value) => formatUtcTime(Number(value)),
           },
           grid: { color: GRID_COLOR },
           border: { color: AXIS_COLOR },
         },
         y: {
+          min: bounds?.min,
+          max: bounds?.max,
           ticks: {
             color: TICK_COLOR,
             callback: (value) => formatPrice(Number(value)),
@@ -107,19 +128,18 @@ export function CandlesChart({ candles, tf }: CandlesChartProps) {
           border: { color: AXIS_COLOR },
         },
       },
-    }),
-    [tf],
-  )
+    }
+  }, [candles, tf])
 
   return (
     <div className={styles.candlesChart__canvas}>
-      <Line data={data} options={options} />
+      <Chart type="candlestick" data={data} options={options} />
     </div>
   )
 }
 
-function volumeOf(item: TooltipItem<'line'>): number {
+function candleOf(item: TooltipItem<'candlestick'>): CandlePoint | null {
   const raw = item.raw as Partial<CandlePoint> | undefined
 
-  return typeof raw?.volume === 'number' ? raw.volume : 0
+  return raw && typeof raw.o === 'number' ? (raw as CandlePoint) : null
 }

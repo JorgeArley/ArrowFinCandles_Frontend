@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { Candle } from '../src/modules/candles-chart/candles-chart.types'
 import {
   aggregateCandles,
-  toChartPoints,
+  priceBounds,
+  toCandlePoints,
 } from '../src/modules/candles-chart/domain/candle-series'
 import fixture from './fixtures/mes-5m.json'
 
@@ -46,28 +47,42 @@ describe('the aggregation of the candles', () => {
       v: 9940,
     })
   })
+
+  it('the price bounds cover the lowest low and the highest high', () => {
+    const bounds = priceBounds(candles)
+
+    expect(bounds?.min).toBeLessThanOrEqual(5623.75)
+    expect(bounds?.max).toBeGreaterThanOrEqual(5672.5)
+  })
+
+  it('the price bounds leave a margin around the candles', () => {
+    const bounds = priceBounds(candles)
+
+    expect(bounds?.min).toBeLessThan(5623.75)
+    expect(bounds?.max).toBeGreaterThan(5672.5)
+  })
 })
 
 describe('the series of the chart', () => {
   it('the series has one point per candle', () => {
-    expect(toChartPoints(candles)).toHaveLength(78)
+    expect(toCandlePoints(candles)).toHaveLength(78)
   })
 
-  it('the series uses the close price', () => {
-    expect(toChartPoints(candles).map((point) => point.y)).toEqual(
-      sortedCandles.map((candle) => candle.c),
+  it('the series carries the OHLC values of its candle', () => {
+    expect(toCandlePoints(candles).map((point) => [point.o, point.h, point.l, point.c])).toEqual(
+      sortedCandles.map((candle) => [candle.o, candle.h, candle.l, candle.c]),
     )
   })
 
   it('the series is ordered from oldest to newest', () => {
-    const timestamps = toChartPoints(candles).map((point) => point.x.getTime())
+    const timestamps = toCandlePoints(candles).map((point) => point.x)
 
     expect(timestamps).toEqual([...timestamps].sort((left, right) => left - right))
     expect(new Set(timestamps).size).toBe(timestamps.length)
   })
 
   it('the series keeps the candle timestamps', () => {
-    expect(toChartPoints(candles).map((point) => point.x.toISOString())).toEqual(
+    expect(toCandlePoints(candles).map((point) => new Date(point.x).toISOString())).toEqual(
       sortedCandles.map((candle) => new Date(candle.t).toISOString()),
     )
   })
@@ -84,10 +99,10 @@ describe('the series of the chart', () => {
       },
     ]
 
-    const points = toChartPoints(single)
+    const points = toCandlePoints(single)
 
     expect(points).toHaveLength(1)
-    expect(points[0].y).toBe(5628.75)
+    expect(points[0]).toMatchObject({ o: 5635.75, h: 5636.75, l: 5627.5, c: 5628.75 })
     expect(aggregateCandles(single)?.count).toBe(1)
   })
 })
