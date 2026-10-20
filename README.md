@@ -1,75 +1,187 @@
-# React + TypeScript + Vite
+# ArrowFin Candles Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Web interface to browse the OHLCV candles served by the
+[ArrowFin candles backend](../arrow-fin-candles_backend).
 
-Currently, two official plugins are available:
+- `GET /candles?symbol=MES&tf=5m` returns the candles of a contract and a timeframe.
+- The interface shows them as a **line of close prices**, with a contract selector, a timeframe
+  selector and the loading / error / success states of the request.
+- The data is never re-aggregated in the browser: the backend already returns the candles of the
+  requested timeframe.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Requirements
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Tool | Version | Why |
+| --- | --- | --- |
+| Node.js | >= 22 (tested on 24) | Vite 8 and Vitest 5 |
+| npm | >= 10 | Dependencies |
 
-## Expanding the ESLint configuration
+The candles API must be running in `http://localhost:3000` (see the backend README).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+---
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Running the project
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+The interface is served in `http://localhost:5173`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Why a proxy
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+The backend does not enable CORS, and `http://localhost:5173` and `http://localhost:3000` are
+different origins for the browser even when they share the host. The dev server proxies
+`/api/*` to the backend, so the browser only talks to its own origin:
 
 ```
+browser -> http://localhost:5173/api/candles?symbol=NQ&tf=15m
+        -> proxy  -> http://localhost:3000/candles?symbol=NQ&tf=15m
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | `/api` | Base URL of the candles API. Set it to `http://localhost:3000` only if the backend allows CORS. |
+| `VITE_API_TARGET` | `http://localhost:3000` | Backend the dev proxy points to. Only used by `npm run dev`. |
+
+### Scripts
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Starts the dev server with the proxy |
+| `npm run build` | Type-checks every project and builds the production bundle |
+| `npm run preview` | Serves the production build |
+| `npm run lint` | ESLint over the whole repository |
+| `npm test` | Runs the test suites once |
+| `npm run test:watch` | Runs the test suites in watch mode |
+
+---
+
+## The interface
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  ArrowFin · Candles                        NQ · 15m      │
+│  ┌────────────┐   ┌──────────────────┐                   │
+│  │ MES │ NQ   │   │ 1m 5m 15m 1h     │                   │
+│  └────────────┘   └──────────────────┘                   │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │              Line chart of the close prices         │  │
+│  └────────────────────────────────────────────────────┘  │
+│  ┌──────┬──────┬──────┬──────┬──────────┐               │
+│  │ Open │ High │ Low  │ Close│  Volume  │               │
+│  └──────┴──────┴──────┴──────┴──────────┘               │
+└──────────────────────────────────────────────────────────┘
+```
+
+| State | What the user sees |
+| --- | --- |
+| Loading | A pulsing skeleton and the message `Loading candles…` |
+| Error | A readable message and a **Retry** button |
+| Success | The chart and the summary of the session |
+
+---
+
+## Architecture
+
+```
+src/
+├── config/env.ts                     Base URL of the API
+├── shared/                           Reusable pieces, unaware of the candles feature
+│   ├── ui/OptionGroup/               Segmented control used by both selectors
+│   ├── ui/Spinner/
+│   └── utils/                        Number and UTC date/time formatting
+└── modules/candles-chart/            The feature
+    ├── candles-chart.types.ts        Candle, ContractSymbol, Timeframe
+    ├── candles-chart.constants.ts    Supported symbols and timeframes
+    ├── domain/candle-series.ts       Deduplication, chart series and session aggregation
+    ├── api/candles-api.ts            HTTP call and error translation
+    ├── hooks/useCandles.ts           Loading / success / error state machine
+    └── components/                   Selectors, chart, summary and states
+```
+
+The rules that are respected:
+
+- The components **render**: they receive data and callbacks, they never fetch.
+- The hook **decides**: it owns the request, the cancellation and the state of the request.
+- `domain/` is **pure**: it knows neither React, nor HTTP, nor Chart.js, so it can be tested
+  without mocks.
+- The module is consumed through its `index.ts`, so the internals can be reorganised without
+  touching `App.tsx`.
+
+### Styles
+
+- **Tailwind CSS v4** for the layout, spacing, typography and responsive rules (no
+  `tailwind.config.js` is needed: the theme is configured in CSS).
+- **CSS Modules with BEM naming** for the visual details of each component: the block is the
+  component (`.candlesChart`), the elements are `block__element` and the modifiers are
+  `block__element--modifier`.
+
+---
+
+## Tests
+
+```bash
+npm test
+```
+
+The suites live in `tests/` and run with Vitest over the pure domain layer:
+
+| Suite | What it checks |
+| --- | --- |
+| `tests/aggregation.spec.ts` | That the aggregation calculations are correct: open, high, low, close, volume and count of the session, and that the chart series has one point per candle, uses the close price, is ordered and keeps the timestamps |
+| `tests/duplicates.spec.ts` | That the duplicated rows do not change the result: a repeated candle does not duplicate the point of the series nor double the volume, resending the whole dataset changes neither the summary nor the series, and the order of the rows does not matter |
+
+The fixture `tests/fixtures/mes-5m.json` is a real response of the API
+(`GET /candles?symbol=MES&tf=5m`), so the expectations are checked against real data.
+
+---
+
+## The API
+
+### `GET /candles`
+
+| Parameter | Required | Accepted values |
+| --- | --- | --- |
+| `symbol` | yes | `MES`, `NQ` |
+| `tf` | yes | `1m`, `5m`, `15m`, `1h` |
+
+```json
+{
+  "symbol": "MES",
+  "tf": "5m",
+  "candles": [
+    {
+      "t": "2026-08-25T14:00:00Z",
+      "o": 5635.75,
+      "h": 5636.75,
+      "l": 5627.5,
+      "c": 5628.75,
+      "v": 9940
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `t` | Start of the group, ISO-8601 in UTC |
+| `o` | Open |
+| `h` | High |
+| `l` | Low |
+| `c` | Close |
+| `v` | Volume |
+
+The backend answers `400` with a readable `message` when the symbol or the timeframe is not
+supported, and `500` when it fails unexpectedly. The frontend shows that message as it is.
+
+---
+
+## Decisions
+
+The reasoning behind the technical choices is in [DECISIONS.md](./DECISIONS.md).
